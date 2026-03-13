@@ -1,3 +1,5 @@
+console.log(1234);
+
 // Глобальные переменные
 let score = 0;
 const scoreEl = document.getElementById('score');
