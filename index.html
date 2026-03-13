@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>AR Quest 3: Pick Up Game</title>
+    <!-- Подключаем A-Frame -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    
+    <style>
+      /* Простой интерфейс для очков */
+      #ui-layer {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        color: white;
+        font-family: sans-serif;
+        font-size: 24px;
+        z-index: 100;
+        text-shadow: 1px 1px 2px black;
+        pointer-events: none;
+      }
+      #dom-overlay {
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- Интерфейс -->
+    <div id="ui-layer">
+      Счет: <span id="score">0</span>
+    </div>
+
+    <!-- Сцена -->
+    <!-- mode="ar" включает камеру, mode="vr" выключает её. 
+         hit-test позволяет ставить объекты на реальный пол -->
+    <a-scene 
+      webxr="optionalFeatures: hit-test, dom-overlay; overlayElement: #dom-overlay"
+      renderer="colorManagement: true; physicallyCorrectLights: true"
+      background="color: #FAFAFA">
+
+      <!-- Ассеты (материалы и т.д.) -->
+      <a-assets>
+        <img id="floor-texture" src="https://cdn.aframe.io/a-painter/images/floor.jpg">
+      </a-assets>
+
+      <!-- Освещение -->
+      <a-entity light="type: ambient; color: #BBB"></a-entity>
+      <a-entity light="type: directional; color: #FFF; intensity: 0.6" position="-0.5 1 1"></a-entity>
+
+      <!-- Пол (в AR он будет прозрачным, но нужен для физики/визуала в VR) -->
+      <a-plane position="0 0 0" rotation="-90 0 0" width="20" height="20" color="#DDD" shadow></a-plane>
+
+      <!-- Контейнер для предметов -->
+      <a-entity id="items-container"></a-entity>
+
+      <!-- Камера и контроллеры -->
+      <a-entity id="rig">
+        <a-camera position="0 1.6 0">
+            <!-- Курсор для взаимодействия в VR режиме -->
+            <a-cursor color="yellow" fuse="false" timeout="1500"></a-cursor>
+        </a-camera>
+
+        <!-- Левая рука -->
+        <a-entity laser-controls="hand: left" raycaster="objects: .grabbable" line-color="yellow"></a-entity>
+        <!-- Правая рука -->
+        <a-entity laser-controls="hand: right" raycaster="objects: .grabbable" line-color="yellow"></a-entity>
+      </a-entity>
+
+    </a-scene>
+
+    <script>
+      // --- Логика игры ---
+
+      let score = 0;
+      const scoreEl = document.getElementById('score');
+      const container = document.getElementById('items-container');
+      
+      // Компонент для предмета, который можно поднять
+      AFRAME.registerComponent('grabbable', {
+        init: function () {
+          this.isHeld = false;
+          this.holder = null;
+          
+          // Слушаем события нажатия триггера на контроллерах
+          // В A-Frame события триггера приходят от сущности контроллера
+          window.addEventListener('triggerdown', this.onTriggerDown.bind(this));
+          window.addEventListener('triggerup', this.onTriggerUp.bind(this));
+        },
+
+        onTriggerDown: function (evt) {
+          if (this.isHeld) return;
+
+          const controller = evt.detail.el;
+          // Проверяем, смотрит ли луч контроллера на этот объект
+          const intersection = controller.components.raycaster.getIntersection(this.el);
+
+          if (intersection) {
+            this.isHeld = true;
+            this.holder = controller;
+            
+            // Визуальный эффект - меняем цвет
+            this.el.setAttribute('material', 'color', '#FF5722');
+            
+            // Увеличиваем счет
+            score++;
+            scoreEl.innerText = score;
+
+            // Спавним новый предмет взамен взятого
+            setTimeout(spawnItem, 500);
+          }
+        },
+
+        onTriggerUp: function (evt) {
+          if (this.isHeld && this.holder === evt.detail.el) {
+            this.isHeld = false;
+            this.holder = null;
+            // Возвращаем цвет
+            this.el.setAttribute('material', 'color', '#4CAF50');
+          }
+        },
+
+        tick: function (time, timeDelta) {
+          if (this.isHeld && this.holder) {
+            // Прикрепляем предмет к контроллеру
+            // Смещаем немного вперед, чтобы не перекрывал руку
+            const controllerPos = this.holder.object3D.position;
+            const controllerQuat = this.holder.object3D.quaternion;
+            
+            // Простая логика: предмет летит за рукой
+            this.el.object3D.position.copy(controllerPos);
+            this.el.object3D.position.y += 0.1; // Чуть выше центра руки
+            
+            // Поворачиваем предмет так же, как руку, но немного иначе для удобства
+            this.el.object3D.quaternion.copy(controllerQuat);
+          }
+        }
+      });
+
+      // Функция создания предмета
+      function spawnItem() {
+        const el = document.createElement('a-box');
+        
+        // Случайная позиция в радиусе 2 метров от центра
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 0.5 + Math.random() * 2; 
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+
+        el.setAttribute('position', {x: x, y: 0.5, z: z}); // y=0.5 (половина высоты куба)
+        el.setAttribute('rotation', {x: Math.random()*360, y: Math.random()*360, z: Math.random()*360});
+        el.setAttribute('material', 'color', '#4CAF50');
+        el.setAttribute('class', 'grabbable'); // Метка для рейкастера
+        el.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 10000');
+        
+        // Добавляем компонент логики
+        el.setAttribute('grabbable', '');
+
+        container.appendChild(el);
+      }
+
+      // Спавним первые 5 предметов
+      for(let i=0; i<5; i++) {
+        spawnItem();
+      }
+
+    </script>
+  </body>
+</html>
