@@ -1,0 +1,40 @@
+/* Интерфейс счета */
+#ui-layer {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  color: white;
+  font-family: sans-serif;
+  font-size: 32px;
+  font-weight: bold;
+  z-index: 100;
+  text-shadow: 2px 2px 4px black;
+  pointer-events: none;
+}
+
+/* --- УВЕЛИЧЕНИЕ КНОПКИ ВХОДА В VR/MR --- */
+.a-enter-vr-button {
+  width: 300px !important;
+  height: 80px !important;
+  bottom: 50px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  border-radius: 15px !important;
+  background-color: rgba(0, 200, 255, 0.8) !important;
+  border: 2px solid white !important;
+}
+
+/* Текст внутри кнопки */
+.a-enter-vr-button .a-enter-vr-icon, 
+.a-enter-vr-button .a-enter-vr-text {
+  font-size: 24px !important;
+  font-weight: bold !important;
+  color: white !important;
+  line-height: 80px !important;
+  text-shadow: none !important;
+}
+
+/* Скрываем иконку, оставляем текст */
+.a-enter-vr-button .a-enter-vr-icon {
+  display: none; 
+}
