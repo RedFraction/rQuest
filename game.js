@@ -9,6 +9,7 @@ let camera = null;
 let cursor = null;
 let leftController = null;
 let rightController = null;
+let cursorRayLine = null;
 
 // Элементы UI
 const scoreEl = document.getElementById('score');
@@ -49,6 +50,14 @@ function initGame() {
   rightController = document.getElementById('right-controller');
   container = document.getElementById('items-container');
   
+  // Создаем линию курсора для визуализации
+  if (cursor) {
+    cursorRayLine = document.createElement('a-entity');
+    cursorRayLine.setAttribute('line', 'start: 0 0 0; end: 0 0 -10; color: cyan; opacity: 0.65');
+    cursorRayLine.setAttribute('visible', 'true');
+    cursor.appendChild(cursorRayLine);
+  }
+
   // Проверка всех элементов
   console.log('📦 [5/7] Проверка элементов:');
   console.log('  - Камера:', camera ? '✅' : '❌');
@@ -178,18 +187,15 @@ function setupEventListeners() {
 function checkIntersectionAndGrab(source) {
   console.log('🔍 Проверка пересечений...', source ? source.id : 'курсор');
   
-  let intersections = null;
-  let sourceName = '';
+  let intersections = [];
   
   // Получаем raycaster из источника
   let raycasterComponent = null;
   
   if (source && source.components && source.components.raycaster) {
     raycasterComponent = source.components.raycaster;
-    sourceName = source.id;
   } else if (cursor && cursor.components && cursor.components.raycaster) {
     raycasterComponent = cursor.components.raycaster;
-    sourceName = 'cursor';
   }
   
   if (!raycasterComponent) {
@@ -202,25 +208,39 @@ function checkIntersectionAndGrab(source) {
   const grabbableObjects = document.querySelectorAll('.grabbable');
   console.log('  - Найдено объектов .grabbable:', grabbableObjects.length);
   
-  // Проверяем каждый объект
+  // Проверяем каждый объект для отладки
   grabbableObjects.forEach((obj, index) => {
     console.log('  - Объект ' + index + ':', obj.id, 'Классы:', obj.className);
   });
-  
-  // Получаем пересечения
-  intersections = raycasterComponent.getIntersection(grabbableObjects);
-  
-  console.log('  - Пересечений:', intersections ? intersections.length : 0);
-  
-  if (intersections && intersections.length > 0) {
-    const hitObject = intersections[0].object.el;
-    console.log('✅ ПОПАДАНИЕ:', hitObject.id);
-    debugIntersection.textContent = 'Пересечение: ' + hitObject.id;
-    grabObject(hitObject);
-  } else {
-    console.log('❌ Нет попаданий');
-    debugIntersection.textContent = 'Пересечение: нет';
+
+  // A-Frame хранит пересечения в компоненте raycaster.intersections
+  if (raycasterComponent.intersections && raycasterComponent.intersections.length > 0) {
+    intersections = raycasterComponent.intersections;
+  } else if (typeof raycasterComponent.getIntersection === 'function') {
+    // Фолбек для старых версий
+    const first = raycasterComponent.getIntersection(grabbableObjects);
+    if (first) {
+      intersections = [first];
+    }
   }
+
+  console.log('  - Пересечений:', intersections ? intersections.length : 0);
+
+  if (intersections && intersections.length > 0) {
+    const hit = intersections.find(i => i.object && i.object.el && i.object.el.classList.contains('grabbable'));
+    if (hit && hit.object.el) {
+      const hitObject = hit.object.el;
+      console.log('✅ ПОПАДАНИЕ:', hitObject.id);
+      debugIntersection.textContent = 'Пересечение: ' + hitObject.id;
+      highlightObject(hitObject);
+      grabObject(hitObject);
+      return;
+    }
+  }
+
+  console.log('❌ Нет попаданий');
+  debugIntersection.textContent = 'Пересечение: нет';
+  unhighlightObject();
 }
 
 // ============================================
@@ -259,6 +279,33 @@ AFRAME.registerComponent('grabbable', {
 });
 
 // ============================================
+// ПОДСВЕТКА ОБЪЕКТА
+// ============================================
+function highlightObject(el) {
+  if (!el || highlightedObject === el || el.getAttribute('held') === 'true') { return; }
+
+  unhighlightObject();
+
+  highlightedObject = el;
+  el.setAttribute('material', 'color', '#FFEB3B');
+  el.setAttribute('material', 'emissive', '#FFEB3B');
+  el.setAttribute('material', 'emissiveIntensity', '0.3');
+}
+
+function unhighlightObject() {
+  if (!highlightedObject) { return; }
+  const obj = highlightedObject;
+  highlightedObject = null;
+
+  if (obj.getAttribute('held') !== 'true') {
+    const defaultColor = obj.getAttribute('material') && obj.getAttribute('material').color ? obj.getAttribute('material').color : '#FFF';
+    obj.setAttribute('material', 'color', defaultColor);
+    obj.setAttribute('material', 'emissive', '#000');
+    obj.setAttribute('material', 'emissiveIntensity', '0');
+  }
+}
+
+// ============================================
 // ЗАХВАТ ОБЪЕКТА
 // ============================================
 function grabObject(el) {
@@ -287,7 +334,7 @@ function grabObject(el) {
   // Визуальный эффект
   el.setAttribute('material', 'color', '#FF5722');
   el.setAttribute('material', 'emissive', '#FF5722');
-  el.setAttribute('material', 'emissiveIntensity', '0.5');
+  el.setAttribute('material', 'emissiveIntensity', '0.8');
   el.setAttribute('material', 'opacity', '1');
   el.setAttribute('material', 'transparent', 'false');
 
@@ -298,6 +345,9 @@ function grabObject(el) {
   camera.appendChild(el);
   el.setAttribute('position', '0 0 -1.5'); 
   el.setAttribute('rotation', '0 0 0');
+
+  // Пропускаем визуалку, чтобы снять подсветку
+  unhighlightObject();
 
   // Счет
   score++;
@@ -326,6 +376,7 @@ function spawnItem() {
   el.setAttribute('rotation', {x: Math.random()*360, y: Math.random()*360, z: Math.random()*360});
   el.setAttribute('material', `color: ${randomColor}; roughness: 0.5; metalness: 0.1`);
   el.setAttribute('class', 'grabbable');
+  el.setAttribute('grabbable', ''); // Применяем компонент grabbable, чтобы init() сработал
   el.setAttribute('held', 'false');
   el.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear');
   el.setAttribute('scale', '0.5 0.5 0.5');
@@ -333,6 +384,8 @@ function spawnItem() {
   container.appendChild(el);
   console.log('📦 Создан:', el.id, 'Классы:', el.className);
 }
+
+let highlightedObject = null;
 
 // ============================================
 // ОТЛАДОЧНЫЙ ЦИКЛ
@@ -347,16 +400,39 @@ function startDebugLoop() {
     
     // Курсор
     if (cursor && cursor.components.raycaster) {
-      const intersections = cursor.components.raycaster.getIntersection(grabbableObjects);
+      let intersections = [];
+      const raycaster = cursor.components.raycaster;
+
+      if (raycaster.intersections && raycaster.intersections.length > 0) {
+        intersections = raycaster.intersections;
+      } else if (typeof raycaster.getIntersection === 'function') {
+        const first = raycaster.getIntersection(grabbableObjects);
+        if (first) { intersections = [first]; }
+      }
+
       if (intersections && intersections.length > 0) {
-        debugCursor.textContent = 'Курсор: ' + intersections[0].object.el.id;
+        const target = intersections[0].object.el;
+        debugCursor.textContent = 'Курсор: ' + target.id;
+        highlightObject(target);
+
+        if (cursorRayLine && intersections[0].point) {
+          const p = intersections[0].point;
+          cursorRayLine.setAttribute('line', `start: 0 0 0; end: ${p.x} ${p.y} ${p.z}; color: cyan; opacity: 0.8`);
+          cursorRayLine.setAttribute('visible', 'true');
+        }
       } else {
         debugCursor.textContent = 'Курсор: пусто';
+        unhighlightObject();
+        if (cursorRayLine) {
+          cursorRayLine.setAttribute('line', 'start: 0 0 0; end: 0 0 -10; color: cyan; opacity: 0.25');
+          cursorRayLine.setAttribute('visible', 'true');
+        }
       }
     } else {
       debugCursor.textContent = 'Курсор: нет raycaster';
+      unhighlightObject();
     }
-  }, 500);
+  }, 100);
 }
 
 window.addEventListener('beforeunload', function() {
