@@ -2,24 +2,35 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>XRQuest</title>
+    <title>MR Quest 3: Pick Up Game</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <!-- Подключаем A-Frame -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    
-    <!-- Подключаем наши стили -->
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
 
     <!-- Интерфейс -->
     <div id="ui-layer">
-      Счет: <span id="score">0</span>
+      <div>📦 Счет: <span id="score">0</span></div>
+      <div id="controls-hint">🖱️ Клик / Q / E - Поднять предмет</div>
+    </div>
+
+    <!-- Отладочная панель -->
+    <div id="debug-panel">
+      <div><strong>🔧 DEBUG PANEL</strong></div>
+      <div id="debug-mode">Режим: PC</div>
+      <div id="debug-ray-left">Левый луч: -</div>
+      <div id="debug-ray-right">Правый луч: -</div>
+      <div id="debug-cursor">Курсор: -</div>
+      <div id="debug-hit">Попадание: -</div>
+      <div id="debug-event">Последнее событие: -</div>
+      <div id="debug-grab">Статус захвата: -</div>
     </div>
 
     <!-- Сцена -->
     <a-scene 
+      id="scene"
       webxr="optionalFeatures: hit-test, dom-overlay; overlayElement: #ui-layer"
       renderer="colorManagement: true; physicallyCorrectLights: true"
       background="color: #ECECEC">
@@ -40,18 +51,37 @@
 
       <!-- Камера и контроллеры -->
       <a-entity id="rig">
-        <a-camera id="camera" position="0 1.6 0" look-controls>
-            <a-cursor color="cyan" scale="1.5 1.5 1.5"></a-cursor>
+        <a-camera id="camera" position="0 1.6 0" look-controls wasd-controls>
+            <!-- Курсор для ПК (мышь) -->
+            <a-entity 
+              id="cursor"
+              cursor="fuse: false; rayOrigin: mouse"
+              raycaster="objects: .grabbable; far: 10"
+              geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
+              material="color: cyan; shader: flat"
+              position="0 0 -1"
+              scale="1.5 1.5 1.5">
+            </a-entity>
         </a-camera>
 
-        <!-- Контроллеры -->
-        <a-entity laser-controls="hand: left" raycaster="objects: .grabbable; far: 10" line-color="cyan"></a-entity>
-        <a-entity laser-controls="hand: right" raycaster="objects: .grabbable; far: 10" line-color="cyan"></a-entity>
+        <!-- Контроллеры для VR -->
+        <a-entity 
+          id="left-controller" 
+          laser-controls="hand: left"
+          raycaster="objects: .grabbable; far: 10; showLine: true"
+          line-color="cyan">
+        </a-entity>
+        
+        <a-entity 
+          id="right-controller" 
+          laser-controls="hand: right"
+          raycaster="objects: .grabbable; far: 10; showLine: true"
+          line-color="cyan">
+        </a-entity>
       </a-entity>
 
     </a-scene>
 
-    <!-- Подключаем логику игры -->
     <script src="game.js"></script>
   </body>
 </html>

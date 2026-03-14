@@ -10,9 +10,40 @@
   z-index: 100;
   text-shadow: 2px 2px 4px black;
   pointer-events: none;
+  user-select: none;
 }
 
-/* --- УВЕЛИЧЕНИЕ КНОПКИ ВХОДА В VR/MR --- */
+#controls-hint {
+  font-size: 18px;
+  font-weight: normal;
+  margin-top: 10px;
+  opacity: 0.8;
+}
+
+/* --- Отладочная панель --- */
+#debug-panel {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  color: #00FF00;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 15px;
+  border-radius: 8px;
+  pointer-events: none;
+  line-height: 1.8;
+  border: 1px solid #00FF00;
+  min-width: 250px;
+}
+
+#debug-panel strong {
+  color: #FFFF00;
+  font-size: 15px;
+}
+
+/* --- Кнопка VR --- */
 .a-enter-vr-button {
   width: 300px !important;
   height: 80px !important;
@@ -24,7 +55,6 @@
   border: 2px solid white !important;
 }
 
-/* Текст внутри кнопки */
 .a-enter-vr-button .a-enter-vr-icon, 
 .a-enter-vr-button .a-enter-vr-text {
   font-size: 24px !important;
@@ -34,7 +64,6 @@
   text-shadow: none !important;
 }
 
-/* Скрываем иконку, оставляем текст */
 .a-enter-vr-button .a-enter-vr-icon {
   display: none; 
 }
