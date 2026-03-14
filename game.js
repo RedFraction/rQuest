@@ -66,6 +66,7 @@ function initGame() {
 
   setupXRButtons();
   createWristMenu();
+  const restored = loadPersistentItems();
 
   // Проверка всех элементов
   console.log('📦 [5/7] Проверка элементов:');
@@ -125,8 +126,12 @@ function initGame() {
   
   // Создаем предметы
   console.log('📦 [6/7] Создаем предметы...');
-  for(let i = 0; i < 8; i++) {
-    spawnItem();
+  if (!restored) {
+    for (let i = 0; i < 8; i++) {
+      spawnItem();
+    }
+  } else {
+    console.log('✅ Восстановлено из localStorage, спавн новых не требуется');
   }
   
   console.log('✅ [7/7] Игра готова!');
@@ -177,6 +182,10 @@ function setupEventListeners() {
       if (lastGrabbed) {
         releaseFromRoom(lastGrabbed);
       }
+    } else if (key === 'x') {
+      console.log('⌨️ Нажата X (создать розовый куб)');
+      debugEvent.textContent = 'Событие: Создать розовый куб';
+      spawnPinkCube();
     }
   });
   
@@ -316,6 +325,7 @@ function bindObjectToRoom(el) {
     debugEvent.textContent = `Событие: ${el.id} привязан к комнате`;
     console.log('📍 Привязано к комнате:', el.id);
 
+    savePersistentItems();
     updateWristMenu();
   } catch (e) {
     console.warn('Ошибка привязки к комнате', e);
@@ -329,6 +339,7 @@ function releaseFromRoom(el) {
   debugEvent.textContent = `Событие: ${el.id} отвязан от комнаты`;
   console.log('🆓 Отвязан от комнаты:', el.id);
 
+  savePersistentItems();
   updateWristMenu();
 }
 
@@ -619,6 +630,91 @@ function spawnItem() {
 
   container.appendChild(el);
   console.log('📦 Создан:', el.id, 'Тип:', itemProp.name, 'Форма:', itemType, 'Классы:', el.className);
+  savePersistentItems();
+}
+
+function spawnPinkCube() {
+  if (!camera || !scene) { return; }
+
+  const camWorldPos = new THREE.Vector3();
+  const camWorldDir = new THREE.Vector3();
+  camera.object3D.getWorldPosition(camWorldPos);
+  camera.object3D.getWorldDirection(camWorldDir);
+
+  const spawnPos = camWorldPos.clone().add(camWorldDir.multiplyScalar(1.2));
+
+  const el = document.createElement('a-box');
+  el.setAttribute('id', 'item-' + Math.random().toString(36).substr(2, 6));
+  el.setAttribute('position', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z });
+  el.setAttribute('rotation', { x: 0, y: 0, z: 0 });
+  el.setAttribute('scale', '0.4 0.4 0.4');
+  el.setAttribute('material', 'color: #FF69B4; roughness: 0.3; metalness: 0.15');
+  el.setAttribute('class', 'grabbable');
+  el.setAttribute('grabbable', '');
+  el.setAttribute('held', 'false');
+  el.setAttribute('data-prop-type', 'pink-cube');
+  el.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 4000; easing: linear');
+
+  container.appendChild(el);
+  console.log('📦 Создан розовый куб:', el.id);
+
+  savePersistentItems();
+}
+
+function savePersistentItems() {
+  try {
+    const grabbableObjects = document.querySelectorAll('.grabbable');
+    const data = Array.from(grabbableObjects).map((obj) => ({
+      id: obj.id,
+      tag: obj.tagName.toLowerCase(),
+      position: obj.getAttribute('position'),
+      rotation: obj.getAttribute('rotation'),
+      scale: obj.getAttribute('scale'),
+      color: obj.getAttribute('material') ? obj.getAttribute('material').color : '#FFFFFF',
+      propType: obj.getAttribute('data-prop-type') || 'default',
+      roomAnchored: obj.hasAttribute('room-anchored'),
+      held: obj.getAttribute('held') === 'true'
+    }));
+    localStorage.setItem('webxrquest-persistent-items', JSON.stringify(data));
+    console.log('💾 Сохранено', data.length, 'объектов');
+  } catch (e) {
+    console.warn('💾 Не удалось сохранить объектные данные', e);
+  }
+}
+
+function loadPersistentItems() {
+  try {
+    const raw = localStorage.getItem('webxrquest-persistent-items');
+    if (!raw) { return; }
+
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) { return; }
+
+    data.forEach((item) => {
+      if (!item.tag) { return; }
+      const el = document.createElement(item.tag);
+      el.setAttribute('id', item.id || 'item-' + Math.random().toString(36).substr(2, 6));
+      el.setAttribute('position', item.position || '0 0.5 -2');
+      el.setAttribute('rotation', item.rotation || '0 0 0');
+      el.setAttribute('scale', item.scale || '0.5 0.5 0.5');
+      el.setAttribute('material', `color: ${item.color || '#FF69B4'}; roughness: 0.35; metalness: 0.15`);
+      el.setAttribute('class', 'grabbable');
+      el.setAttribute('grabbable', '');
+      el.setAttribute('held', item.held ? 'true' : 'false');
+      el.setAttribute('data-prop-type', item.propType || 'persisted');
+      if (item.roomAnchored) {
+        el.setAttribute('room-anchored', 'true');
+      }
+      el.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear');
+      container.appendChild(el);
+    });
+
+    console.log('💾 Загрузено', data.length, 'сохраненных объектов');
+    return data.length;
+  } catch (e) {
+    console.warn('💾 Не удалось загрузить сохраненные объекты', e);
+    return 0;
+  }
 }
 
 // ============================================
