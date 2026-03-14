@@ -41,6 +41,32 @@
   font-size: 15px;
 }
 
+#xr-buttons {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 110;
+  display: flex;
+  gap: 12px;
+}
+
+#xr-buttons button {
+  width: 90px;
+  height: 42px;
+  border: 1px solid white;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.65);
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+#xr-buttons button:hover {
+  background: rgba(0, 160, 240, 0.9);
+}
+
 .a-enter-vr-button {
   width: 300px !important;
   height: 80px !important;

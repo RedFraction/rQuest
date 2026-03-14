@@ -3,6 +3,7 @@
 // ============================================
 let score = 0;
 let isVR = false;
+let isAR = false;
 let debugInterval = null;
 let scene = null;
 let camera = null;
@@ -10,6 +11,9 @@ let cursor = null;
 let leftController = null;
 let rightController = null;
 let cursorRayLine = null;
+let floorPlane = null;
+let highlightedObject = null;
+let lastGrabbed = null;
 
 // Элементы UI
 const scoreEl = document.getElementById('score');
@@ -58,6 +62,11 @@ function initGame() {
     cursor.appendChild(cursorRayLine);
   }
 
+  floorPlane = document.getElementById('floor-plane');
+
+  setupXRButtons();
+  createWristMenu();
+
   // Проверка всех элементов
   console.log('📦 [5/7] Проверка элементов:');
   console.log('  - Камера:', camera ? '✅' : '❌');
@@ -74,17 +83,38 @@ function initGame() {
   
   // Слушаем вход/выход из VR
   scene.addEventListener('enter-vr', () => {
-    isVR = true;
-    debugMode.textContent = 'Режим: VR/AR 🥽';
-    debugMode.style.color = '#00FFFF';
-    console.log('🥽 Вход в VR');
+    const session = scene.renderer.xr?.getSession();
+    isAR = !!(session && session.environmentBlendMode === 'alpha-blend');
+    isVR = !isAR;
+
+    if (isAR) {
+      debugMode.textContent = 'Режим: AR 📱';
+      debugMode.style.color = '#00FFFF';
+      if (floorPlane) { floorPlane.setAttribute('visible', 'false'); }
+      console.log('📱 Вход в AR');
+    } else {
+      debugMode.textContent = 'Режим: VR 🥽';
+      debugMode.style.color = '#00FFFF';
+      if (floorPlane) { floorPlane.setAttribute('visible', 'true'); }
+      console.log('🥽 Вход в VR');
+    }
+
+    const uiLayer = document.getElementById('ui-layer');
+    if (uiLayer) { uiLayer.style.display = 'block'; }
+    updateWristMenu();
   });
   
   scene.addEventListener('exit-vr', () => {
     isVR = false;
+    isAR = false;
+    if (floorPlane) { floorPlane.setAttribute('visible', 'true'); }
+    const uiLayer = document.getElementById('ui-layer');
+    if (uiLayer) { uiLayer.style.display = 'block'; }
     debugMode.textContent = 'Режим: PC 💻';
     debugMode.style.color = '#00FF00';
     console.log('💻 Выход из VR');
+
+    updateWristMenu();
   });
   
   // Настраиваем обработчики
@@ -135,6 +165,18 @@ function setupEventListeners() {
       if (rightController) {
         checkIntersectionAndGrab(rightController);
       }
+    } else if (key === 'r') {
+      console.log('⌨️ Нажата R (привязка к комнате)');
+      debugEvent.textContent = 'Событие: Привязка к комнате';
+      if (lastGrabbed) {
+        bindObjectToRoom(lastGrabbed);
+      }
+    } else if (key === 'f') {
+      console.log('⌨️ Нажата F (отпуск)');
+      debugEvent.textContent = 'Событие: Отпуск';
+      if (lastGrabbed) {
+        releaseFromRoom(lastGrabbed);
+      }
     }
   });
   
@@ -179,6 +221,115 @@ function setupEventListeners() {
       checkIntersectionAndGrab(rightController);
     });
   }
+}
+
+function setupXRButtons() {
+  const btnVR = document.getElementById('btn-vr');
+  const btnAR = document.getElementById('btn-ar');
+  if (!btnVR || !btnAR || !scene) { return; }
+
+  btnVR.addEventListener('click', () => {
+    debugEvent.textContent = 'Событие: Запуск VR';
+    if (scene.enterVR) { scene.enterVR(); }
+  });
+
+  btnAR.addEventListener('click', async () => {
+    debugEvent.textContent = 'Событие: Запуск AR';
+    if (scene.enterAR) {
+      scene.enterAR();
+      return;
+    }
+
+    try {
+      if (!navigator.xr) { throw new Error('XR не поддерживается'); }
+      const supportAR = await navigator.xr.isSessionSupported('immersive-ar');
+      if (!supportAR) { throw new Error('AR не поддерживается'); }
+
+      const session = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.getElementById('ui-layer') }
+      });
+
+      scene.renderer.xr.setReferenceSpaceType('local-floor');
+      await scene.renderer.xr.setSession(session);
+    } catch (e) {
+      console.warn('❌ AR mode failed:', e);
+      alert('AR mode не доступен: ' + e.message);
+    }
+  });
+}
+
+function createWristMenu() {
+  if (!leftController || !scene) { return; }
+
+  const menu = document.createElement('a-entity');
+  menu.setAttribute('id', 'left-wrist-menu');
+  menu.setAttribute('position', '0.08 0.04 -0.06');
+  menu.setAttribute('rotation', '-90 0 0');
+  menu.setAttribute('scale', '0.6 0.6 0.6');
+
+  const bg = document.createElement('a-plane');
+  bg.setAttribute('width', '0.25');
+  bg.setAttribute('height', '0.32');
+  bg.setAttribute('color', '#000');
+  bg.setAttribute('opacity', '0.6');
+  menu.appendChild(bg);
+
+  const info = document.createElement('a-text');
+  info.setAttribute('id', 'wrist-menu-text');
+  info.setAttribute('value', 'MENU\nR: Anchor\nF: Release\nQ/E: Grab');
+  info.setAttribute('align', 'left');
+  info.setAttribute('color', '#FFF');
+  info.setAttribute('position', '-0.11 0.1 0.01');
+  info.setAttribute('width', '0.45');
+  menu.appendChild(info);
+
+  leftController.appendChild(menu);
+}
+
+function updateWristMenu() {
+  const info = document.getElementById('wrist-menu-text');
+  if (!info) { return; }
+
+  const mode = isAR ? 'AR' : isVR ? 'VR' : 'PC';
+  info.setAttribute('value', `MENU\nРежим: ${mode}\nОчки: ${score}\nR: Anchor\nF: Release\nQ/E: Grab`);
+}
+
+function bindObjectToRoom(el) {
+  if (!el || !scene) { return; }
+  try {
+    const worldPos = new THREE.Vector3();
+    const worldQuat = new THREE.Quaternion();
+    const worldScale = new THREE.Vector3();
+    el.object3D.getWorldPosition(worldPos);
+    el.object3D.getWorldQuaternion(worldQuat);
+    el.object3D.getWorldScale(worldScale);
+
+    scene.appendChild(el);
+    el.object3D.position.copy(worldPos);
+    el.object3D.quaternion.copy(worldQuat);
+    el.object3D.scale.copy(worldScale);
+
+    el.setAttribute('room-anchored', 'true');
+    el.setAttribute('held', 'false');
+    debugEvent.textContent = `Событие: ${el.id} привязан к комнате`;
+    console.log('📍 Привязано к комнате:', el.id);
+
+    updateWristMenu();
+  } catch (e) {
+    console.warn('Ошибка привязки к комнате', e);
+  }
+}
+
+function releaseFromRoom(el) {
+  if (!el) { return; }
+  el.removeAttribute('room-anchored');
+  el.setAttribute('held', 'false');
+  debugEvent.textContent = `Событие: ${el.id} отвязан от комнаты`;
+  console.log('🆓 Отвязан от комнаты:', el.id);
+
+  updateWristMenu();
 }
 
 // ============================================
@@ -232,6 +383,8 @@ function checkIntersectionAndGrab(source) {
       const hitObject = hit.object.el;
       console.log('✅ ПОПАДАНИЕ:', hitObject.id);
       debugIntersection.textContent = 'Пересечение: ' + hitObject.id;
+      highlightedObject = hitObject;
+      lastGrabbed = hitObject;
       highlightObject(hitObject);
       grabObject(hitObject);
       return;
@@ -374,6 +527,9 @@ function grabObject(el) {
     debugGrab.textContent = 'ОШИБКА: null объект';
     return;
   }
+
+  lastGrabbed = el;
+  updateWristMenu();
   
   const isHeld = el.getAttribute('held');
   console.log('  - Уже в руке:', isHeld);
@@ -464,8 +620,6 @@ function spawnItem() {
   container.appendChild(el);
   console.log('📦 Создан:', el.id, 'Тип:', itemProp.name, 'Форма:', itemType, 'Классы:', el.className);
 }
-
-let highlightedObject = null;
 
 // ============================================
 // ОТЛАДОЧНЫЙ ЦИКЛ

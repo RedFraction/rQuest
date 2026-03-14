@@ -27,6 +27,12 @@
       <div id="debug-grab">Захват: -</div>
     </div>
 
+    <!-- XR кнопки -->
+    <div id="xr-buttons">
+      <button id="btn-vr">VR</button>
+      <button id="btn-ar">AR</button>
+    </div>
+
     <!-- Сцена -->
     <a-scene 
       id="scene"
@@ -43,7 +49,7 @@
       <a-entity light="type: directional; color: #FFF; intensity: 1.2" position="-1 2 1"></a-entity>
 
       <!-- Пол -->
-      <a-plane position="0 0 0" rotation="-90 0 0" width="50" height="50" color="#DDD" shadow></a-plane>
+      <a-plane id="floor-plane" position="0 0 0" rotation="-90 0 0" width="50" height="50" color="#DDD" shadow></a-plane>
 
       <!-- Контейнер для предметов -->
       <a-entity id="items-container"></a-entity>
