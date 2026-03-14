@@ -20,12 +20,11 @@
     <div id="debug-panel">
       <div><strong>🔧 DEBUG PANEL</strong></div>
       <div id="debug-mode">Режим: PC</div>
-      <div id="debug-ray-left">Левый луч: -</div>
-      <div id="debug-ray-right">Правый луч: -</div>
-      <div id="debug-cursor">Курсор: -</div>
-      <div id="debug-hit">Попадание: -</div>
-      <div id="debug-event">Последнее событие: -</div>
-      <div id="debug-grab">Статус захвата: -</div>
+      <div id="debug-objects">Объектов в сцене: 0</div>
+      <div id="debug-cursor">Курсор: не инициализирован</div>
+      <div id="debug-intersection">Пересечение: нет</div>
+      <div id="debug-event">Событие: -</div>
+      <div id="debug-grab">Захват: -</div>
     </div>
 
     <!-- Сцена -->
@@ -49,18 +48,18 @@
       <!-- Контейнер для предметов -->
       <a-entity id="items-container"></a-entity>
 
-      <!-- Камера и контроллеры -->
+      <!-- Камера с курсором -->
       <a-entity id="rig">
         <a-camera id="camera" position="0 1.6 0" look-controls wasd-controls>
-            <!-- Курсор для ПК (мышь) -->
+            <!-- Курсор для ПК -->
             <a-entity 
               id="cursor"
-              cursor="fuse: false; rayOrigin: mouse"
-              raycaster="objects: .grabbable; far: 10"
               geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
               material="color: cyan; shader: flat"
               position="0 0 -1"
-              scale="1.5 1.5 1.5">
+              scale="1.5 1.5 1.5"
+              cursor="fuse: false; rayOrigin: mouse"
+              raycaster="objects: .grabbable; far: 10">
             </a-entity>
         </a-camera>
 
@@ -68,15 +67,13 @@
         <a-entity 
           id="left-controller" 
           laser-controls="hand: left"
-          raycaster="objects: .grabbable; far: 10; showLine: true"
-          line-color="cyan">
+          raycaster="objects: .grabbable; far: 10">
         </a-entity>
         
         <a-entity 
           id="right-controller" 
           laser-controls="hand: right"
-          raycaster="objects: .grabbable; far: 10; showLine: true"
-          line-color="cyan">
+          raycaster="objects: .grabbable; far: 10">
         </a-entity>
       </a-entity>
 

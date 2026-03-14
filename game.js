@@ -4,266 +4,222 @@
 let score = 0;
 let isVR = false;
 let debugInterval = null;
+let scene = null;
+let camera = null;
+let cursor = null;
+let leftController = null;
+let rightController = null;
 
 // Элементы UI
 const scoreEl = document.getElementById('score');
 const container = document.getElementById('items-container');
-const camera = document.getElementById('camera');
-const cursor = document.getElementById('cursor');
-
-// Отладочные элементы
 const debugMode = document.getElementById('debug-mode');
-const debugRayLeft = document.getElementById('debug-ray-left');
-const debugRayRight = document.getElementById('debug-ray-right');
+const debugObjects = document.getElementById('debug-objects');
 const debugCursor = document.getElementById('debug-cursor');
-const debugHit = document.getElementById('debug-hit');
+const debugIntersection = document.getElementById('debug-intersection');
 const debugEvent = document.getElementById('debug-event');
 const debugGrab = document.getElementById('debug-grab');
-
-// Контроллеры
-let leftController = null;
-let rightController = null;
-let scene = null;
 
 // ============================================
 // ИНИЦИАЛИЗАЦИЯ
 // ============================================
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('🔍 [INIT] DOM загружен, ждём сцену...');
+  console.log('🔍 [1/7] DOM загружен');
   
   scene = document.querySelector('a-scene');
   
   if (scene.hasLoaded) {
     initGame();
   } else {
+    console.log('⏳ [2/7] Ждём загрузки сцены...');
     scene.addEventListener('loaded', function() {
-      console.log('✅ [INIT] Сцена загружена');
+      console.log('✅ [3/7] Сцена загружена');
       initGame();
     });
   }
 });
 
 function initGame() {
-  console.log('🎮 [INIT] Инициализация игры...');
+  console.log('🎮 [4/7] Инициализация игры...');
   
+  // Получаем элементы
+  camera = document.getElementById('camera');
+  cursor = document.getElementById('cursor');
   leftController = document.getElementById('left-controller');
   rightController = document.getElementById('right-controller');
+  container = document.getElementById('items-container');
   
-  // Проверка элементов
-  console.log('📦 [INIT] Курсор:', cursor ? 'OK' : 'NOT FOUND');
-  console.log('📦 [INIT] Левый контроллер:', leftController ? 'OK' : 'NOT FOUND');
-  console.log('📦 [INIT] Правый контроллер:', rightController ? 'OK' : 'NOT FOUND');
-  console.log('📦 [INIT] Камера:', camera ? 'OK' : 'NOT FOUND');
+  // Проверка всех элементов
+  console.log('📦 [5/7] Проверка элементов:');
+  console.log('  - Камера:', camera ? '✅' : '❌');
+  console.log('  - Курсор:', cursor ? '✅' : '❌');
+  console.log('  - Левый контроллер:', leftController ? '✅' : '❌');
+  console.log('  - Правый контроллер:', rightController ? '✅' : '❌');
+  console.log('  - Контейнер:', container ? '✅' : '❌');
+  
+  // Проверка raycaster на курсоре
+  if (cursor) {
+    console.log('  - Курсор имеет raycaster:', cursor.components.raycaster ? '✅' : '❌');
+    console.log('  - Курсор имеет cursor:', cursor.components.cursor ? '✅' : '❌');
+  }
   
   // Слушаем вход/выход из VR
   scene.addEventListener('enter-vr', () => {
     isVR = true;
     debugMode.textContent = 'Режим: VR/AR 🥽';
     debugMode.style.color = '#00FFFF';
-    console.log('🥽 [VR] Вход в VR/AR режим');
+    console.log('🥽 Вход в VR');
   });
   
   scene.addEventListener('exit-vr', () => {
     isVR = false;
     debugMode.textContent = 'Режим: PC 💻';
     debugMode.style.color = '#00FF00';
-    console.log('💻 [VR] Выход из VR/AR режима');
+    console.log('💻 Выход из VR');
   });
   
-  // Настраиваем обработчики событий
+  // Настраиваем обработчики
   setupEventListeners();
   
-  // Запускаем отладочный цикл
+  // Запускаем отладку
   startDebugLoop();
   
-  // Создаем стартовые предметы
-  console.log('📦 [SPAWN] Создаем 8 стартовых предметов...');
+  // Создаем предметы
+  console.log('📦 [6/7] Создаем предметы...');
   for(let i = 0; i < 8; i++) {
     spawnItem();
   }
   
-  console.log('✅ [INIT] Игра готова!');
+  console.log('✅ [7/7] Игра готова!');
+  console.log('👉 Наведите курсор на куб и кликните');
 }
 
 // ============================================
 // ОБРАБОТЧИКИ СОБЫТИЙ
 // ============================================
 function setupEventListeners() {
-  console.log('🔌 [EVENTS] Настройка обработчиков событий...');
+  console.log('🔌 Настройка обработчиков...');
   
-  // 1. Клик мышью (ПК) - самый надёжный способ
-  document.addEventListener('click', function(evt) {
-    console.log('🖱️ [EVENT] Глобальный клик detected');
-    
-    // Проверяем, кликнули ли по canvas A-Frame
-    if (evt.target.tagName === 'CANVAS' || evt.target.closest('#scene')) {
-      checkClickOnGrabbable();
-    }
-  });
+  // 1. Клик мышью по canvas
+  const canvas = document.querySelector('canvas');
+  if (canvas) {
+    canvas.addEventListener('click', function(evt) {
+      console.log('🖱️ Клик по canvas');
+      debugEvent.textContent = 'Событие: Клик мыши';
+      checkIntersectionAndGrab();
+    });
+  }
   
-  // 2. Клавиши Q и E (ПК тесты)
+  // 2. Клавиши Q и E
   document.addEventListener('keydown', function(event) {
     const key = event.key.toLowerCase();
     
     if (key === 'q') {
-      console.log('⌨️ [EVENT] Нажата клавиша Q (левый курок)');
-      debugEvent.textContent = 'Событие: Q (левый)';
+      console.log('⌨️ Нажата Q');
+      debugEvent.textContent = 'Событие: Q';
       if (leftController) {
-        simulateTrigger(leftController, 'Левый');
+        checkIntersectionAndGrab(leftController);
       }
     } else if (key === 'e') {
-      console.log('⌨️ [EVENT] Нажата клавиша E (правый курок)');
-      debugEvent.textContent = 'Событие: E (правый)';
+      console.log('⌨️ Нажата E');
+      debugEvent.textContent = 'Событие: E';
       if (rightController) {
-        simulateTrigger(rightController, 'Правый');
+        checkIntersectionAndGrab(rightController);
       }
     }
   });
   
-  // 3. События от контроллеров VR
-  if (leftController) {
-    leftController.addEventListener('triggerdown', function(evt) {
-      console.log('🎮 [VR] Левый курок нажат');
-      debugEvent.textContent = 'Событие: Левый курок';
-      simulateTrigger(leftController, 'Левый VR');
+  // 3. Курсор - клик
+  if (cursor) {
+    cursor.addEventListener('click', function(evt) {
+      console.log('🎯 Клик курсора');
+      debugEvent.textContent = 'Событие: Клик курсора';
+      if (evt.detail && evt.detail.el) {
+        console.log('  - Целевой объект:', evt.detail.el.id);
+        grabObject(evt.detail.el);
+      } else {
+        checkIntersectionAndGrab();
+      }
     });
     
-    leftController.addEventListener('mouseenter', function(evt) {
+    cursor.addEventListener('mouseenter', function(evt) {
       if (evt.detail && evt.detail.el) {
-        console.log('👆 [VR] Левый луч наведён на:', evt.detail.el.id);
+        console.log('👆 Курсор на:', evt.detail.el.id);
+        debugIntersection.textContent = 'Пересечение: ' + evt.detail.el.id;
       }
+    });
+    
+    cursor.addEventListener('mouseleave', function() {
+      debugIntersection.textContent = 'Пересечение: нет';
+    });
+  }
+  
+  // 4. Контроллеры VR
+  if (leftController) {
+    leftController.addEventListener('triggerdown', function() {
+      console.log('🎮 Левый курок');
+      debugEvent.textContent = 'Событие: Левый курок';
+      checkIntersectionAndGrab(leftController);
     });
   }
   
   if (rightController) {
-    rightController.addEventListener('triggerdown', function(evt) {
-      console.log('🎮 [VR] Правый курок нажат');
+    rightController.addEventListener('triggerdown', function() {
+      console.log('🎮 Правый курок');
       debugEvent.textContent = 'Событие: Правый курок';
-      simulateTrigger(rightController, 'Правый VR');
-    });
-    
-    rightController.addEventListener('mouseenter', function(evt) {
-      if (evt.detail && evt.detail.el) {
-        console.log('👆 [VR] Правый луч наведён на:', evt.detail.el.id);
-      }
-    });
-  }
-  
-  // 4. События от курсора (ПК)
-  if (cursor) {
-    cursor.addEventListener('mouseenter', function(evt) {
-      if (evt.detail && evt.detail.el) {
-        console.log('👆 [PC] Курсор наведён на:', evt.detail.el.id);
-        debugHit.textContent = 'Попадание: ' + evt.detail.el.id;
-      }
-    });
-    
-    cursor.addEventListener('mouseleave', function(evt) {
-      debugHit.textContent = 'Попадание: -';
-    });
-    
-    cursor.addEventListener('click', function(evt) {
-      console.log('🖱️ [PC] Клик курсора');
-      debugEvent.textContent = 'Событие: Клик курсора';
-      if (evt.detail && evt.detail.el) {
-        grabObject(evt.detail.el, 'Курсор ПК');
-      }
+      checkIntersectionAndGrab(rightController);
     });
   }
 }
 
 // ============================================
-// ПРОВЕРКА КЛИКА ПО ОБЪЕКТАМ
+// ПРОВЕРКА ПЕРЕСЕЧЕНИЙ
 // ============================================
-function checkClickOnGrabbable() {
-  console.log('🔍 [CLICK] Проверка попаданий...');
+function checkIntersectionAndGrab(source) {
+  console.log('🔍 Проверка пересечений...', source ? source.id : 'курсор');
   
-  // Проверяем курсор (ПК)
-  if (cursor && cursor.components.raycaster) {
-    const intersections = cursor.components.raycaster.getIntersection(
-      document.querySelectorAll('.grabbable')
-    );
-    
-    console.log('🔍 [CLICK] Пересечений курсором:', intersections ? intersections.length : 0);
-    
-    if (intersections && intersections.length > 0) {
-      const hitObject = intersections[0].object.el;
-      console.log('✅ [CLICK] Попадание курсором:', hitObject.id);
-      debugHit.textContent = 'Попадание: ' + hitObject.id;
-      grabObject(hitObject, 'Курсор ПК');
-      return;
-    }
+  let intersections = null;
+  let sourceName = '';
+  
+  // Получаем raycaster из источника
+  let raycasterComponent = null;
+  
+  if (source && source.components && source.components.raycaster) {
+    raycasterComponent = source.components.raycaster;
+    sourceName = source.id;
+  } else if (cursor && cursor.components && cursor.components.raycaster) {
+    raycasterComponent = cursor.components.raycaster;
+    sourceName = 'cursor';
   }
   
-  // Проверяем левый контроллер
-  if (leftController && leftController.components.raycaster) {
-    const intersections = leftController.components.raycaster.getIntersection(
-      document.querySelectorAll('.grabbable')
-    );
-    
-    if (intersections && intersections.length > 0) {
-      const hitObject = intersections[0].object.el;
-      console.log('✅ [CLICK] Попадание левым контроллером:', hitObject.id);
-      debugHit.textContent = 'Попадание: ' + hitObject.id + ' (L)';
-      grabObject(hitObject, 'Левый контроллер');
-      return;
-    }
-  }
-  
-  // Проверяем правый контроллер
-  if (rightController && rightController.components.raycaster) {
-    const intersections = rightController.components.raycaster.getIntersection(
-      document.querySelectorAll('.grabbable')
-    );
-    
-    if (intersections && intersections.length > 0) {
-      const hitObject = intersections[0].object.el;
-      console.log('✅ [CLICK] Попадание правым контроллером:', hitObject.id);
-      debugHit.textContent = 'Попадание: ' + hitObject.id + ' (R)';
-      grabObject(hitObject, 'Правый контроллер');
-      return;
-    }
-  }
-  
-  console.log('❌ [CLICK] Нет попаданий');
-  debugHit.textContent = 'Попадание: Нет';
-}
-
-// ============================================
-// СИМУЛЯЦИЯ КУРКА
-// ============================================
-function simulateTrigger(controller, source) {
-  console.log('🔫 [TRIGGER] Симуляция курка:', source);
-  
-  if (!controller || !controller.components.raycaster) {
-    console.warn('⚠️ [TRIGGER] Контроллер или raycaster не найден');
+  if (!raycasterComponent) {
+    console.error('❌ Raycaster не найден!');
+    debugIntersection.textContent = 'Raycaster: НЕ НАЙДЕН';
     return;
   }
   
-  const raycaster = controller.components.raycaster;
-  const intersections = raycaster.getIntersection(
-    document.querySelectorAll('.grabbable')
-  );
+  // Получаем все объекты с классом grabbable
+  const grabbableObjects = document.querySelectorAll('.grabbable');
+  console.log('  - Найдено объектов .grabbable:', grabbableObjects.length);
   
-  console.log('🔍 [TRIGGER] Пересечений:', intersections ? intersections.length : 0);
+  // Проверяем каждый объект
+  grabbableObjects.forEach((obj, index) => {
+    console.log('  - Объект ' + index + ':', obj.id, 'Классы:', obj.className);
+  });
+  
+  // Получаем пересечения
+  intersections = raycasterComponent.getIntersection(grabbableObjects);
+  
+  console.log('  - Пересечений:', intersections ? intersections.length : 0);
   
   if (intersections && intersections.length > 0) {
     const hitObject = intersections[0].object.el;
-    console.log('✅ [TRIGGER] Попадание:', hitObject.id);
-    debugHit.textContent = 'Попадание: ' + hitObject.id;
-    
-    // Визуальная обратная связь
-    if (cursor) {
-      cursor.setAttribute('material', 'color', '#FF5722');
-      setTimeout(() => {
-        cursor.setAttribute('material', 'color', 'cyan');
-      }, 150);
-    }
-    
-    grabObject(hitObject, source);
+    console.log('✅ ПОПАДАНИЕ:', hitObject.id);
+    debugIntersection.textContent = 'Пересечение: ' + hitObject.id;
+    grabObject(hitObject);
   } else {
-    console.log('❌ [TRIGGER] Нет попаданий');
-    debugHit.textContent = 'Попадание: Нет (' + source + ')';
+    console.log('❌ Нет попаданий');
+    debugIntersection.textContent = 'Пересечение: нет';
   }
 }
 
@@ -274,27 +230,30 @@ AFRAME.registerComponent('grabbable', {
   init: function () {
     const el = this.el;
     
-    // Генерируем уникальный ID
+    // Уникальный ID
     el.id = 'item-' + Math.random().toString(36).substr(2, 6);
-    el.setAttribute('data-grabbable', 'true');
     
-    console.log('📦 [GRABBABLE] Создан предмет:', el.id);
+    console.log('📦 Создан grabbable:', el.id);
+    console.log('  - Классы:', el.className);
+    console.log('  - Есть класс grabbable:', el.classList.contains('grabbable'));
     
-    // Событие клика на объекте
+    // Клик на объекте
     el.addEventListener('click', function (evt) {
-      console.log('🖱️ [GRABBABLE] Клик на объекте:', el.id);
+      console.log('🖱️ Клик на объекте:', el.id);
       debugEvent.textContent = 'Событие: Клик на ' + el.id;
-      grabObject(el, 'Клик на объекте');
+      grabObject(el);
     });
     
     // Наведение
     el.addEventListener('mouseenter', () => {
+      console.log('👆 Наведение на:', el.id);
       el.setAttribute('material', 'opacity', '0.7');
       el.setAttribute('material', 'transparent', 'true');
     });
     
     el.addEventListener('mouseleave', () => {
       el.setAttribute('material', 'opacity', '1');
+      el.setAttribute('material', 'transparent', 'false');
     });
   }
 });
@@ -302,32 +261,26 @@ AFRAME.registerComponent('grabbable', {
 // ============================================
 // ЗАХВАТ ОБЪЕКТА
 // ============================================
-function grabObject(el, source) {
-  console.log('🤚 [GRAB] Попытка захвата от:', source);
+function grabObject(el) {
+  console.log('🤚 Захват объекта:', el ? el.id : 'NULL');
   
   if (!el) {
-    console.error('❌ [GRAB] Объект null!');
-    debugGrab.textContent = 'Статус: ОШИБКА (null)';
-    return;
-  }
-  
-  if (!el.parentNode) {
-    console.error('❌ [GRAB] Объект не в DOM!', el.id);
-    debugGrab.textContent = 'Статус: ОШИБКА (нет в DOM)';
+    console.error('❌ Объект null!');
+    debugGrab.textContent = 'ОШИБКА: null объект';
     return;
   }
   
   const isHeld = el.getAttribute('held');
-  console.log('🔍 [GRAB] Объект:', el.id, 'Уже в руке:', isHeld);
+  console.log('  - Уже в руке:', isHeld);
   
   if (isHeld === 'true') {
-    console.log('ℹ️ [GRAB] Объект уже в руке');
-    debugGrab.textContent = 'Статус: Уже в руке';
+    console.log('ℹ️ Уже в руке');
+    debugGrab.textContent = 'Уже в руке';
     return;
   }
 
-  console.log('✅ [GRAB] ЗАХВАТ УСПЕШЕН:', el.id);
-  debugGrab.textContent = 'Статус: ЗАХВАЧЕН (' + el.id + ')';
+  console.log('✅ ЗАХВАТ УСПЕШЕН:', el.id);
+  debugGrab.textContent = 'ЗАХВАЧЕН: ' + el.id;
   
   el.setAttribute('held', 'true');
   
@@ -338,7 +291,7 @@ function grabObject(el, source) {
   el.setAttribute('material', 'opacity', '1');
   el.setAttribute('material', 'transparent', 'false');
 
-  // Останавливаем анимацию вращения
+  // Останавливаем анимацию
   el.removeAttribute('animation');
 
   // Перемещаем к камере
@@ -349,10 +302,9 @@ function grabObject(el, source) {
   // Счет
   score++;
   scoreEl.innerText = score;
-  console.log('📊 [SCORE] Новый счет:', score);
+  console.log('📊 Счет:', score);
 
   // Новый предмет
-  console.log('📦 [SPAWN] Спавн нового предмета через 800мс...');
   setTimeout(spawnItem, 800);
 }
 
@@ -379,55 +331,34 @@ function spawnItem() {
   el.setAttribute('scale', '0.5 0.5 0.5');
 
   container.appendChild(el);
-  console.log('📦 [SPAWN] Создан предмет:', el.id, 'Позиция:', x.toFixed(2), z.toFixed(2));
+  console.log('📦 Создан:', el.id, 'Классы:', el.className);
 }
 
 // ============================================
 // ОТЛАДОЧНЫЙ ЦИКЛ
 // ============================================
 function startDebugLoop() {
-  console.log('🔍 [DEBUG] Запуск отладочного цикла...');
+  console.log('🔍 Запуск отладочного цикла...');
   
   debugInterval = setInterval(() => {
+    // Количество объектов
+    const grabbableObjects = document.querySelectorAll('.grabbable');
+    debugObjects.textContent = 'Объектов в сцене: ' + grabbableObjects.length;
+    
     // Курсор
     if (cursor && cursor.components.raycaster) {
-      const intersections = cursor.components.raycaster.getIntersection(
-        document.querySelectorAll('.grabbable')
-      );
+      const intersections = cursor.components.raycaster.getIntersection(grabbableObjects);
       if (intersections && intersections.length > 0) {
         debugCursor.textContent = 'Курсор: ' + intersections[0].object.el.id;
       } else {
         debugCursor.textContent = 'Курсор: пусто';
       }
+    } else {
+      debugCursor.textContent = 'Курсор: нет raycaster';
     }
-    
-    // Левый контроллер
-    if (leftController && leftController.components.raycaster) {
-      const intersections = leftController.components.raycaster.getIntersection(
-        document.querySelectorAll('.grabbable')
-      );
-      if (intersections && intersections.length > 0) {
-        debugRayLeft.textContent = 'Левый луч: ' + intersections[0].object.el.id;
-      } else {
-        debugRayLeft.textContent = 'Левый луч: пусто';
-      }
-    }
-    
-    // Правый контроллер
-    if (rightController && rightController.components.raycaster) {
-      const intersections = rightController.components.raycaster.getIntersection(
-        document.querySelectorAll('.grabbable')
-      );
-      if (intersections && intersections.length > 0) {
-        debugRayRight.textContent = 'Правый луч: ' + intersections[0].object.el.id;
-      } else {
-        debugRayRight.textContent = 'Правый луч: пусто';
-      }
-    }
-  }, 300);
+  }, 500);
 }
 
-// Очистка при закрытии
 window.addEventListener('beforeunload', function() {
   if (debugInterval) {
     clearInterval(debugInterval);
