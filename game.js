@@ -13,7 +13,7 @@ let cursorRayLine = null;
 
 // Элементы UI
 const scoreEl = document.getElementById('score');
-const container = document.getElementById('items-container');
+let container = document.getElementById('items-container');
 const debugMode = document.getElementById('debug-mode');
 const debugObjects = document.getElementById('debug-objects');
 const debugCursor = document.getElementById('debug-cursor');
@@ -305,6 +305,64 @@ function unhighlightObject() {
   }
 }
 
+function playGrabSound() {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.type = 'square';
+    oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.25);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.25);
+  } catch (e) {
+    console.warn('🔊 Не удалось воспроизвести звук: ', e);
+  }
+}
+
+function spawnGrabParticles(el) {
+  if (!scene || !el || !el.object3D) { return; }
+
+  const area = new THREE.Vector3();
+  el.object3D.getWorldPosition(area);
+
+  const emitter = document.createElement('a-entity');
+  emitter.setAttribute('position', `${area.x} ${area.y} ${area.z}`);
+
+  const count = 10;
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('a-sphere');
+    const size = 0.03 + Math.random() * 0.03;
+    const dx = (Math.random() - 0.5) * 0.8;
+    const dy = (Math.random() - 0.2) * 0.8;
+    const dz = (Math.random() - 0.5) * 0.8;
+
+    p.setAttribute('radius', size);
+    p.setAttribute('material', `color: #ffd600; emissive: #ffeb3b; emissiveIntensity: 1`);
+    p.setAttribute('position', '0 0 0');
+    p.setAttribute('animation__move', `property: position; to: ${dx} ${dy} ${dz}; dur: 450; easing: easeOutQuad;`);
+    p.setAttribute('animation__fade', 'property: material.opacity; to: 0; dur: 450; easing: linear;');
+    p.setAttribute('material', 'opacity', '1');
+
+    emitter.appendChild(p);
+  }
+
+  scene.appendChild(emitter);
+
+  setTimeout(() => {
+    if (emitter.parentNode) {
+      emitter.parentNode.removeChild(emitter);
+    }
+  }, 500);
+}
+
 // ============================================
 // ЗАХВАТ ОБЪЕКТА
 // ============================================
@@ -326,11 +384,15 @@ function grabObject(el) {
     return;
   }
 
-  console.log('✅ ЗАХВАТ УСПЕШЕН:', el.id);
-  debugGrab.textContent = 'ЗАХВАЧЕН: ' + el.id;
-  
+  const propType = el.getAttribute('data-prop-type') || 'unknown';
+  console.log('✅ ЗАХВАТ УСПЕШЕН:', el.id, 'Тип:', propType);
+  debugGrab.textContent = `ЗАХВАЧЕН: ${el.id} (${propType})`;
+
+  playGrabSound();
+  spawnGrabParticles(el);
+
   el.setAttribute('held', 'true');
-  
+
   // Визуальный эффект
   el.setAttribute('material', 'color', '#FF5722');
   el.setAttribute('material', 'emissive', '#FF5722');
@@ -362,27 +424,45 @@ function grabObject(el) {
 // СПАВН ПРЕДМЕТА
 // ============================================
 function spawnItem() {
-  const el = document.createElement('a-box');
-  
+  const itemTypes = ['a-box', 'a-sphere', 'a-cylinder', 'a-cone'];
+  const itemProps = [
+    { name: 'crate', color: '#8D6E63', scale: '0.6 0.6 0.6', radius: null },
+    { name: 'orb', color: '#03A9F4', scale: '0.45 0.45 0.45', radius: null },
+    { name: 'barrel', color: '#FF9800', scale: '0.5 0.7 0.5', radius: 0.25 },
+    { name: 'cone', color: '#E91E63', scale: '0.5 0.7 0.5', radius: 0.28 },
+    { name: 'gem', color: '#9C27B0', scale: '0.4 0.4 0.4', radius: null }
+  ];
+
+  const typeIndex = Math.floor(Math.random() * itemTypes.length);
+  const itemType = itemTypes[typeIndex];
+  const itemProp = itemProps[Math.floor(Math.random() * itemProps.length)];
+
+  const el = document.createElement(itemType);
+  el.setAttribute('id', 'item-' + Math.random().toString(36).substr(2, 6));
+
   const angle = Math.random() * Math.PI * 2;
-  const radius = 1 + Math.random() * 3; 
+  const radius = 1 + Math.random() * 3;
   const x = Math.cos(angle) * radius;
   const z = Math.sin(angle) * radius;
 
-  const colors = ['#4CAF50', '#2196F3', '#FFC107', '#9C27B0', '#E91E63'];
-  const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-  el.setAttribute('position', {x: x, y: 0.5, z: z});
+  el.setAttribute('position', {x: x, y: 0.55, z: z});
   el.setAttribute('rotation', {x: Math.random()*360, y: Math.random()*360, z: Math.random()*360});
-  el.setAttribute('material', `color: ${randomColor}; roughness: 0.5; metalness: 0.1`);
+  el.setAttribute('material', `color: ${itemProp.color}; roughness: 0.35; metalness: 0.15`);
   el.setAttribute('class', 'grabbable');
-  el.setAttribute('grabbable', ''); // Применяем компонент grabbable, чтобы init() сработал
+  el.setAttribute('grabbable', '');
   el.setAttribute('held', 'false');
   el.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear');
-  el.setAttribute('scale', '0.5 0.5 0.5');
+  el.setAttribute('scale', itemProp.scale);
+
+  if (itemProp.radius !== null && el.setAttribute) {
+    el.setAttribute('radius', itemProp.radius);
+  }
+
+  // Сохранить тип предмета для отладки
+  el.setAttribute('data-prop-type', itemProp.name);
 
   container.appendChild(el);
-  console.log('📦 Создан:', el.id, 'Классы:', el.className);
+  console.log('📦 Создан:', el.id, 'Тип:', itemProp.name, 'Форма:', itemType, 'Классы:', el.className);
 }
 
 let highlightedObject = null;
